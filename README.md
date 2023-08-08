@@ -13,7 +13,7 @@ Step 1: Create an Ansible Playbook
 
 Create a new Ansible playbook (e.g., rke-server) with the following content:
 
-yaml
+```
 
 ---
 - name: Install RKE2 server on Ubuntu
@@ -49,12 +49,15 @@ yaml
       service:
         name: rke2-server
         enabled: yes
+```
 
 Step 2: Create an Inventory File
 
 Create an Ansible inventory file (e.g., inventory.ini) containing the target hosts' information:
 
 ini
+
+```
 
 [rke2_master]
 192.168.1.70
@@ -63,6 +66,7 @@ ansible_user='admin'
 ansible_password='password'
 ansible_become_password='password'
 # Add more hosts if needed
+```
 
 Replace your_target_host1, your_target_host2, etc., in the inventory file with the actual IP addresses or hostnames of the target hosts where you want to install RKE2 server.
 Step 3: Run the Ansible Playbook
@@ -71,7 +75,9 @@ Execute the Ansible playbook to install RKE2 server:
 
 bash
 
-ansible-playbook -i inventory.ini rke-server
+```
+ansible-playbook -i host.ini rke-server.yml
+```
 
 The playbook will add the RKE2 repository's GPG key, add the RKE2 APT repository, update the APT cache, install the RKE2 server package, start the RKE2 service, and enable it to start on boot on the target hosts specified in the inventory file.
 Conclusion
