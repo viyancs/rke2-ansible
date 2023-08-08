@@ -1,0 +1,34 @@
+---
+- name: Install RKE2 server on Ubuntu
+  hosts: rke2_master
+  become: true
+  tasks:
+    - name: Add RKE2 repository GPG key
+      apt_key:
+        url: https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/xUbuntu_{{ ansible_distribution_release }}/Release.key
+        state: present
+
+    - name: Add RKE2 APT repository
+      apt_repository:
+        repo: deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_{{ ansible_distribution_release }}/
+        state: present
+        filename: rke2
+
+    - name: Update APT cache
+      apt:
+        update_cache: yes
+
+    - name: Install RKE2 server package
+      apt:
+        name: rke2-server
+        state: latest
+
+    - name: Start RKE2 service
+      service:
+        name: rke2-server
+        state: started
+
+    - name: Enable RKE2 service on boot
+      service:
+        name: rke2-server
+        enabled: yes
