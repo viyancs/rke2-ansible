@@ -1,0 +1,31 @@
+---
+- name: Install RKE2 worker node
+  hosts: rke2_worker_hosts
+  become: true
+  tasks:
+    - name: Add RKE2 repository GPG key
+      apt_key:
+        url: https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/xUbuntu_{{ ansible_distribution_release }}/Release.key
+        state: present
+
+    - name: Add RKE2 APT repository
+      apt_repository:
+        repo: deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_{{ ansible_distribution_release }}/
+        state: present
+        filename: rke2
+
+    - name: Update APT cache
+      apt:
+        update_cache: yes
+
+    - name: Install RKE2 worker package
+      apt:
+        name: rke2-agent
+        state: latest
+
+    - name: Retrieve cluster token from the control plane node
+      shell: rke2 server --token
+      register: cluster_token
+
+    - name: Join worker node to RKE2 cluster
+      shell: rke2 agent --server https://your_control_plane_ip:9345 --token {{ cluster_token.stdout }}
