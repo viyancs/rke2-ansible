@@ -61,11 +61,17 @@
         - fs.inotify.max_user_watches=524288
         - fs.inotify.max_user_instances=512
 
-    - name: Restart systemd-sysctl
+    - name: Restart systemd-sysctl if sysctl changed
       systemd:
         name: systemd-sysctl
         state: restarted
-      listen: "sysctl changed"
+      notify: "Restart systemd-sysctl"
+
+    - name: Ensure sysctl settings are applied
+      template:
+        src: sysctl.conf.j2
+        dest: /etc/sysctl.conf
+      notify: "Reload sysctl"
 
     - name: Create etcd user
       user:
@@ -186,3 +192,6 @@
       systemd:
         name: systemd-sysctl
         state: restarted
+
+    - name: Reload sysctl
+      command: sysctl --system
