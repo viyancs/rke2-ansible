@@ -176,18 +176,17 @@
           pause:
             seconds: 30
           when: cluster_initialized.changed | default(false)
-          
+
         - name: Perform control-plane installation
           systemd:
             name: rke2-server
             enabled: yes
             state: started
-      vars:
-        max_retries: 1000
-      register: cluster_initialized
-      until: "'443 open' in cluster_initialized.stdout"
-      retries: "{{ max_retries }}"
+      loop: "{{ range(1, 1000) | list }}"
       delay: 10
+      register: cluster_initialized
+      until: "'443 open' in cluster_initialized.results[-1].stdout"
+
 
   handlers:
     - name: Restart systemd-sysctl
