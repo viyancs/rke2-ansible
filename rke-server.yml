@@ -57,7 +57,7 @@
       when: not directory_exists.stat.exists
 
     - name: Decompress rancher images
-      command: gunzip /tmp/rke2-images.linux-amd64.tar.gz
+      command: gunzip --force /tmp/rke2-images.linux-amd64.tar.gz
       args:
         chdir: /var/lib/rancher/rke2/agent/images
 
