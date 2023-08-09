@@ -6,11 +6,11 @@
   vars:
     rancher_binary_url: "https://github.com/rancher/rke2/releases/download/v1.26.7%2Brke2r1/rke2.linux-amd64.tar.gz"
     rancher_images_url: "https://github.com/rancher/rke2/releases/download/v1.26.7%2Brke2r1/rke2-images.linux-amd64.tar.gz"
-    control_plane_dns: "CONTROL_PLANE_DNS"
-    rancher_token: "YOUR_RANCHER_TOKEN"
-    etcd_backup_bucket: "ETCD_BACKUP_BUCKET"
-    project: "YOUR_PROJECT"
-    environment: "YOUR_ENVIRONMENT"
+    # control_plane_dns: "CONTROL_PLANE_DNS"
+    # rancher_token: "YOUR_RANCHER_TOKEN"
+    # etcd_backup_bucket: "ETCD_BACKUP_BUCKET"
+    # project: "YOUR_PROJECT"
+    # environment: "YOUR_ENVIRONMENT"
 
   tasks:
     - name: Update apt cache
@@ -95,102 +95,102 @@
       shell: "curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone"
       register: availability_zone_result
 
-    - name: Determine Control-Plane Node Type
-      shell: |
-        if [[ "{{ availability_zone_result.stdout }}" == *"1a"* ]]; then
-            if timeout 1 bash -c "true <>/dev/tcp/{{ control_plane_dns }}/9345" 2>/dev/null; then
-                echo "Supervisor port is available, this is NOT the first node to come online"
-                echo "server: https://{{ control_plane_dns }}:9345" > /etc/rancher/rke2/config.yaml
-            else
-                echo "Supervisor port is NOT available, this is the first node to come online"
-                echo "NODE_TYPE=leader"
-            fi
-        else
-            echo "This is likely NOT the first control-plane node to come online due to not being in the first az"
-            echo "server: https://{{ control_plane_dns }}:9345" > /etc/rancher/rke2/config.yaml
-        fi
-      args:
-        executable: /bin/bash
-      register: control_plane_type_result
+  #   - name: Determine Control-Plane Node Type
+  #     shell: |
+  #       if [[ "{{ availability_zone_result.stdout }}" == *"1a"* ]]; then
+  #           if timeout 1 bash -c "true <>/dev/tcp/{{ control_plane_dns }}/9345" 2>/dev/null; then
+  #               echo "Supervisor port is available, this is NOT the first node to come online"
+  #               echo "server: https://{{ control_plane_dns }}:9345" > /etc/rancher/rke2/config.yaml
+  #           else
+  #               echo "Supervisor port is NOT available, this is the first node to come online"
+  #               echo "NODE_TYPE=leader"
+  #           fi
+  #       else
+  #           echo "This is likely NOT the first control-plane node to come online due to not being in the first az"
+  #           echo "server: https://{{ control_plane_dns }}:9345" > /etc/rancher/rke2/config.yaml
+  #       fi
+  #     args:
+  #       executable: /bin/bash
+  #     register: control_plane_type_result
 
-    - name: Set Control-Plane Node Type Fact
-      set_fact:
-        node_type: "{{ control_plane_type_result.stdout_lines[0] }}"
+  #   - name: Set Control-Plane Node Type Fact
+  #     set_fact:
+  #       node_type: "{{ control_plane_type_result.stdout_lines[0] }}"
 
-    - name: Get provider_id
-      shell: >
-        curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)/$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
-      register: provider_id
+  #   - name: Get provider_id
+  #     shell: >
+  #       curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)/$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+  #     register: provider_id
 
-    - name: Get internal hostname
-      shell: >
-        curl -s http://169.254.169.254/latest/meta-data/local-hostname | awk -F '.' '{print $1}').$(curl -s http://169.254.169.254/latest/meta-data/placement/region).compute.internal
-      register: internal_hostname
+  #   - name: Get internal hostname
+  #     shell: >
+  #       curl -s http://169.254.169.254/latest/meta-data/local-hostname | awk -F '.' '{print $1}').$(curl -s http://169.254.169.254/latest/meta-data/placement/region).compute.internal
+  #     register: internal_hostname
 
-    - name: Set hostname
-      hostname:
-        name: "{{ internal_hostname.stdout }}"
+  #   - name: Set hostname
+  #     hostname:
+  #       name: "{{ internal_hostname.stdout }}"
 
-    - name: Configure server
-      lineinfile:
-        path: /etc/rancher/rke2/config.yaml
-        line: |
-          token: "{{ rancher_token }}"
-          kubelet-arg:
-            - "provider-id=aws:///{{ provider_id.stdout }}"
-          kube-apiserver-arg:
-            - "api-audiences=https://kubernetes.default.svc.cluster.local,rke2,sts.amazonaws.com"
-            - "service-account-issuer=https://kubernetes.default.svc.cluster.local"
-            - "service-account-issuer=https://{{ project }}-{{ environment }}-oidc.s3.{{ region }}.amazonaws.com"
-          node-taint:
-            - "CriticalAddonsOnly=true:NoExecute"
-          tls-san:
-            - "{{ control_plane_dns }}"
-          disable:
-            - "rke2-ingress-nginx"
-          etcd-s3: "true"
-          etcd-s3-bucket: "{{ etcd_backup_bucket }}"
-          etcd-s3-region: "{{ region }}"
-      vars:
-        rancher_token: "{{ rancher_token }}"
-        provider_id: "{{ provider_id.stdout }}"
-        project: "{{ project }}"
-        environment: "{{ environment }}"
-        control_plane_dns: "{{ control_plane_dns }}"
-        etcd_backup_bucket: "{{ etcd_backup_bucket }}"
-        region: "{{ region }}"
-      when: internal_hostname.changed
+  #   - name: Configure server
+  #     lineinfile:
+  #       path: /etc/rancher/rke2/config.yaml
+  #       line: |
+  #         token: "{{ rancher_token }}"
+  #         kubelet-arg:
+  #           - "provider-id=aws:///{{ provider_id.stdout }}"
+  #         kube-apiserver-arg:
+  #           - "api-audiences=https://kubernetes.default.svc.cluster.local,rke2,sts.amazonaws.com"
+  #           - "service-account-issuer=https://kubernetes.default.svc.cluster.local"
+  #           - "service-account-issuer=https://{{ project }}-{{ environment }}-oidc.s3.{{ region }}.amazonaws.com"
+  #         node-taint:
+  #           - "CriticalAddonsOnly=true:NoExecute"
+  #         tls-san:
+  #           - "{{ control_plane_dns }}"
+  #         disable:
+  #           - "rke2-ingress-nginx"
+  #         etcd-s3: "true"
+  #         etcd-s3-bucket: "{{ etcd_backup_bucket }}"
+  #         etcd-s3-region: "{{ region }}"
+  #     vars:
+  #       rancher_token: "{{ rancher_token }}"
+  #       provider_id: "{{ provider_id.stdout }}"
+  #       project: "{{ project }}"
+  #       environment: "{{ environment }}"
+  #       control_plane_dns: "{{ control_plane_dns }}"
+  #       etcd_backup_bucket: "{{ etcd_backup_bucket }}"
+  #       region: "{{ region }}"
+  #     when: internal_hostname.changed
 
-    - name: Perform control-plane installation
-      block:
-        - name: Enable and start RKE2 service
-          systemd:
-            name: rke2-server
-            enabled: yes
-            state: started
-      when: NODE_TYPE == "leader"
+  #   - name: Perform control-plane installation
+  #     block:
+  #       - name: Enable and start RKE2 service
+  #         systemd:
+  #           name: rke2-server
+  #           enabled: yes
+  #           state: started
+  #     when: NODE_TYPE == "leader"
 
-    - name: Wait for cluster readiness
-      pause:
-        seconds: 30
-      when: cluster_initialized.changed | default(false)
+  #   - name: Wait for cluster readiness
+  #     pause:
+  #       seconds: 30
+  #     when: cluster_initialized.changed | default(false)
 
-    - name: Perform control-plane installation
-      systemd:
-        name: rke2-server
-        enabled: yes
-        state: started
-      register: cluster_initialized
-      until: "'443 open' in cluster_initialized.stdout"
-      retries: 1000
-      delay: 10
-      when: cluster_initialized is not defined or cluster_initialized is failed
+  #   - name: Perform control-plane installation
+  #     systemd:
+  #       name: rke2-server
+  #       enabled: yes
+  #       state: started
+  #     register: cluster_initialized
+  #     until: "'443 open' in cluster_initialized.stdout"
+  #     retries: 1000
+  #     delay: 10
+  #     when: cluster_initialized is not defined or cluster_initialized is failed
 
-  handlers:
-    - name: Restart systemd-sysctl
-      systemd:
-        name: systemd-sysctl
-        state: restarted
+  # handlers:
+  #   - name: Restart systemd-sysctl
+  #     systemd:
+  #       name: systemd-sysctl
+  #       state: restarted
 
-    - name: Reload sysctl
-      command: sysctl --system
+  #   - name: Reload sysctl
+  #     command: sysctl --system
