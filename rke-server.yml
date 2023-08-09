@@ -23,30 +23,65 @@
         name: ["curl", "gzip", "tar", "systemd"]
         state: present
 
-    - name: Download Rancher files
+    - name: Check if Rancher binary file exists
+      stat:
+        path: /tmp/rke2.linux-amd64.tar.gz
+      register: rancher_binary_exists
+
+    - name: Download Rancher binary file
       get_url:
         url: "{{ rancher_binary_url }}"
         dest: /tmp/rke2.linux-amd64.tar.gz
+      when: not rancher_binary_exists.stat.exists
+
+    - name: Check if Rancher images file exists
+      stat:
+        path: /tmp/rke2-images.linux-amd64.tar.gz
+      register: rancher_images_exists
+
+    - name: Download Rancher images file
+      get_url:
+        url: "{{ rancher_images_url }}"
+        dest: /tmp/rke2-images.linux-amd64.tar.gz
+      when: not rancher_images_exists.stat.exists
+
+    - name: Check if images directory exists
+      stat:
+        path: /var/lib/rancher/rke2/agent/images
+      register: directory_exists
 
     - name: Create images directory
       file:
         path: /var/lib/rancher/rke2/agent/images
         state: directory
+      when: not directory_exists.stat.exists
 
     - name: Decompress rancher images
       command: gunzip /tmp/rke2-images.linux-amd64.tar.gz
       args:
         chdir: /var/lib/rancher/rke2/agent/images
 
+    - name: Check if rke2-images archive exists
+      stat:
+        path: /var/lib/rancher/rke2/agent/images/rke2-images.linux-amd64.tar
+      register: archive_exists
+
     - name: Move images archive
       command: mv /var/lib/rancher/rke2/agent/images/rke2-images.linux-amd64.tar /var/lib/rancher/rke2/agent/images/
-      
+      when: archive_exists.stat.exists
+
+    - name: Check if Rancher tarball exists
+      stat:
+        path: /tmp/rke2.linux-amd64.tar.gz
+      register: tarball_exists
+
     - name: Install Rancher tarball
       unarchive:
         src: /tmp/rke2.linux-amd64.tar.gz
         dest: /usr/local
         remote_src: yes
       become: yes
+      when: tarball_exists.stat.exists
 
     - name: Copy sysctl configuration
       copy:
