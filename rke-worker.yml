@@ -27,7 +27,7 @@
       when: not script_exists.stat.exists
 
     - name: Run RKE2 installation script
-      command: INSTALL_RKE2_TYPE="agent" sh /tmp/rke2-install.sh
+      shell: INSTALL_RKE2_TYPE="agent" sh /tmp/rke2-install.sh
       args:
         chdir: /tmp
       when: not script_exists.stat.exists
