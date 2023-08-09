@@ -20,7 +20,7 @@
 
     - name: Install required packages
       apt:
-        name: ["curl", "gunzip", "tar", "systemd-sysv"]
+        name: ["curl", "gzip", "tar", "systemd"]
         state: present
 
     - name: Download Rancher files
