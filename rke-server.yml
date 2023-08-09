@@ -4,8 +4,8 @@
   become: yes  # To escalate privileges (equivalent to sudo)
 
   vars:
-    rancher_binary_url: "URL_TO_RKE2_BINARY"
-    rancher_images_url: "URL_TO_RKE2_IMAGES"
+    rancher_binary_url: "https://github.com/rancher/rke2/releases/download/v1.26.7%2Brke2r1/rke2.linux-amd64.tar.gz"
+    rancher_images_url: "https://github.com/rancher/rke2/releases/download/v1.26.7%2Brke2r1/rke2-images.linux-amd64.tar.gz"
     control_plane_dns: "CONTROL_PLANE_DNS"
     rancher_token: "YOUR_RANCHER_TOKEN"
     etcd_backup_bucket: "ETCD_BACKUP_BUCKET"
@@ -20,7 +20,7 @@
 
     - name: Install required packages
       apt:
-        name: ["curl", "sysctl", "gunzip", "tar", "systemd-sysv"]
+        name: ["curl", "gunzip", "tar", "systemd-sysv"]
         state: present
 
     - name: Download Rancher files
