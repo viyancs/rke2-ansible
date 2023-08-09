@@ -1,6 +1,6 @@
 ---
 - name: Rancher RKE2 Setup
-  hosts: worker
+  hosts: rke2_worker
   become: yes
 
   vars:
@@ -15,177 +15,51 @@
         name: "*"
         state: latest
 
-    - name: Install Amazon ECR Credential Helper
-      yum:
-        name: amazon-ecr-credential-helper
-        state: present
-
-    - name: Check if Rancher binary file exists
+    - name: Check if RKE2 installation script exists
       stat:
-        path: /tmp/rke2.linux-amd64.tar.gz
-      register: rancher_binary_exists
+        path: /tmp/rke2-install.sh
+      register: script_exists
 
-    - name: Download Rancher binary file
+    - name: Download RKE2 installation script
       get_url:
-        url: "{{ rancher_binary_url }}"
-        dest: /tmp/rke2.linux-amd64.tar.gz
-      when: not rancher_binary_exists.stat.exists
+        url: https://get.rke2.io
+        dest: /tmp/rke2-install.sh
+      when: not script_exists.stat.exists
 
-    - name: Check if Rancher images file exists
-      stat:
-        path: /tmp/rke2-images.linux-amd64.tar.gz
-      register: rancher_images_exists
-
-    - name: Download Rancher images file
-      get_url:
-        url: "{{ rancher_images_url }}"
-        dest: /tmp/rke2-images.linux-amd64.tar.gz
-      when: not rancher_images_exists.stat.exists
-
-    - name: Check if images directory exists
-      stat:
-        path: /var/lib/rancher/rke2/agent/images
-      register: directory_exists
-
-    - name: Create images directory
-      file:
-        path: /var/lib/rancher/rke2/agent/images
-        state: directory
-      when: not directory_exists.stat.exists
-
-    - name: Decompress rancher images
-      command: gunzip /tmp/rke2-images.linux-amd64.tar.gz
+    - name: Run RKE2 installation script
+      command: INSTALL_RKE2_TYPE="agent" sh /tmp/rke2-install.sh
       args:
-        chdir: /var/lib/rancher/rke2/agent/images
+        chdir: /tmp
+      when: not script_exists.stat.exists
 
-    - name: Check if rke2-images archive exists
-      stat:
-        path: /var/lib/rancher/rke2/agent/images/rke2-images.linux-amd64.tar
-      register: archive_exists
-
-    - name: Move images archive
-      command: mv /var/lib/rancher/rke2/agent/images/rke2-images.linux-amd64.tar /var/lib/rancher/rke2/agent/images/
-      when: archive_exists.stat.exists
-
-    - name: Check if Rancher tarball exists
-      stat:
-        path: /tmp/rke2.linux-amd64.tar.gz
-      register: tarball_exists
-
-    - name: Install Rancher tarball
-      unarchive:
-        src: /tmp/rke2.linux-amd64.tar.gz
-        dest: /usr/local
-        remote_src: yes
-      become: yes
-      when: tarball_exists.stat.exists
-
-    - name: Copy sysctl configuration
-      copy:
-        src: /usr/local/share/rke2/rke2-cis-sysctl.conf
-        dest: /etc/sysctl.d/60-rke2-cis.conf
-
-    - name: Set Kernel parameters
-      sysctl:
-        name: "{{ item }}"
-        value: "{{ item_value }}"
-      with_items:
-        - fs.inotify.max_user_watches=524288
-        - fs.inotify.max_user_instances=512
-
-    - name: Restart systemd-sysctl
+    - name: Enable rke2-agent.service
       systemd:
-        name: systemd-sysctl
-        state: restarted
-
-    - name: Create etcd user
-      user:
-        name: etcd
-        system: yes
-        shell: /sbin/nologin
-
-    - name: Check if config directory exists
-      stat:
-        path: /etc/rancher/rke2
-      register: directory_exists
-
-    - name: Create config directory
-      file:
-        path: /etc/rancher/rke2
-        state: directory
-      when: not directory_exists.stat.exists
-
-
-    - name: Add KUBECONFIG and PATH to ~/.bashrc
-      lineinfile:
-        path: ~/.bashrc
-        line: |
-          export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
-          export PATH=$PATH:/var/lib/rancher/r
-
-    
-    - name: Check for GPU presence
-      shell: |
-        if [ -d "/proc/driver/nvidia/gpus/" ] && [ $(ls -1 /proc/driver/nvidia/gpus/ | wc -l) -gt 0 ]; then
-          echo "GPU_PRESENT=yes"
-        else
-          echo "GPU_PRESENT=no"
-        fi
-      register: gpu_presence
-
-    - name: Configure GPU-related settings
-      block:
-        - name: Reinstall nvidia-container-toolkit
-          yum:
-            name: nvidia-container-toolkit
-            state: latest
-
-        - name: Configure RKE2 to use external containerd
-          lineinfile:
-            path: /etc/rancher/rke2/config.yaml
-            line: "container-runtime-endpoint: unix:///run/containerd/containerd.sock"
-          when: gpu_presence.stdout == "GPU_PRESENT=yes"
-
-        - name: Reset containerd config to default
-          command: containerd config default > /etc/containerd/config.toml
-          when: gpu_presence.stdout == "GPU_PRESENT=yes"
-
-        - name: Configure containerd to use nvidia-container-runtime
-          replace:
-            path: /etc/containerd/config.toml
-            regexp: '^(      default_runtime_name = "runc")$'
-            replace: '      default_runtime_name = "nvidia-container-runtime"'
-          when: gpu_presence.stdout == "GPU_PRESENT=yes"
-
-        - name: Add nvidia-container-runtime runtime configuration to containerd
-          blockinfile:
-            path: /etc/containerd/config.toml
-            block: |
-              [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia-container-runtime]
-                runtime_type = "io.containerd.runtime.v1.linux"
-          when: gpu_presence.stdout == "GPU_PRESENT=yes"
-
-        - name: Change containerd runtime to nvidia-container-runtime
-          replace:
-            path: /etc/containerd/config.toml
-            regexp: '^(    runtime = "runc")$'
-            replace: '    runtime = "nvidia-container-runtime"'
-          when: gpu_presence.stdout == "GPU_PRESENT=yes"
-
-        - name: Restart containerd
-          systemd:
-            name: containerd
-            state: restarted
-          when: gpu_presence.stdout == "GPU_PRESENT=yes"
-
-        - name: Add node label for GPU
-          lineinfile:
-            path: /etc/rancher/rke2/config.yaml
-            line: "node-label:\n  - \"nvidia-gpu=true\""
-          when: gpu_presence.stdout == "GPU_PRESENT=yes"
-
-    - name: Perform node installation
-      systemd:
-        name: rke2-agent
+        name: rke2-agent.service
         enabled: yes
+
+    - name: Check if directory /etc/rancher/rke2/ exists
+      stat:
+        path: /etc/rancher/rke2/
+      register: dir_exists
+
+    - name: Create directory /etc/rancher/rke2/
+      file:
+        path: /etc/rancher/rke2/
+        state: directory
+        mode: '0755'
+      when: not dir_exists.stat.exists
+
+    - name: Create/Edit /etc/rancher/rke2/config.yaml
+      blockinfile:
+        path: /etc/rancher/rke2/config.yaml
+        block: |
+          # Place your configuration here
+          # token get from server path /var/lib/rancher/rke2/server/node-token
+          server: https://<server>:9345
+          token: K102e8351cb2ffbea8b1ff43367a4e11b496add5ed4e1c306c14ffeca15364b2bc0::server:b5ad32d28c3f0ffa8d2ccc2229234699
+      create: yes
+
+    - name: Start rke2-agent.service
+      systemd:
+        name: rke2-agent.service
         state: started
