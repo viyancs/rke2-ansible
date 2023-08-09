@@ -171,22 +171,20 @@
       when: NODE_TYPE == "leader"
 
     - name: Wait for cluster readiness
-      block:
-        - name: Pause for a few seconds
-          pause:
-            seconds: 30
-          when: cluster_initialized.changed | default(false)
+      pause:
+        seconds: 30
+      when: cluster_initialized.changed | default(false)
 
-        - name: Perform control-plane installation
-          systemd:
-            name: rke2-server
-            enabled: yes
-            state: started
-      loop: "{{ range(1, 1000) | list }}"
-      delay: 10
+    - name: Perform control-plane installation
+      systemd:
+        name: rke2-server
+        enabled: yes
+        state: started
       register: cluster_initialized
-      until: "'443 open' in cluster_initialized.results[-1].stdout"
-
+      until: "'443 open' in cluster_initialized.stdout"
+      retries: 1000
+      delay: 10
+      when: cluster_initialized is not defined or cluster_initialized is failed
 
   handlers:
     - name: Restart systemd-sysctl
