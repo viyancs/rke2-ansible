@@ -55,9 +55,8 @@
         block: |
           # Place your configuration here
           # token get from server path /var/lib/rancher/rke2/server/node-token
-          server: https://<server>:9345
-          token: K102e8351cb2ffbea8b1ff43367a4e11b496add5ed4e1c306c14ffeca15364b2bc0::server:b5ad32d28c3f0ffa8d2ccc2229234699
-      create: yes
+          server: https://172.31.22.134:9345
+          token: K102e8351cb2ffbea8b1ff43367a4e11b496add5ed4e1c306c14ffeca15364b
 
     - name: Start rke2-agent.service
       systemd:
