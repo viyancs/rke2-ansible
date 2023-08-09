@@ -66,8 +66,8 @@
         path: /var/lib/rancher/rke2/agent/images/rke2-images.linux-amd64.tar
       register: archive_exists
 
-    - name: Move images archive
-      command: mv /var/lib/rancher/rke2/agent/images/rke2-images.linux-amd64.tar /var/lib/rancher/rke2/agent/images/
+    - name: Copy images archive
+      command: cp /var/lib/rancher/rke2/agent/images/rke2-images.linux-amd64.tar /var/lib/rancher/rke2/agent/images/
       when: archive_exists.stat.exists
 
     - name: Check if Rancher tarball exists
