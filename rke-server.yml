@@ -90,11 +90,11 @@
 
     - name: Set Kernel parameters
       sysctl:
-        name: "{{ item }}"
-        value: "{{ item_value }}"
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
       with_items:
-        - fs.inotify.max_user_watches=524288
-        - fs.inotify.max_user_instances=512
+        - { name: "fs.inotify.max_user_watches", value: "524288" }
+        - { name: "fs.inotify.max_user_instances", value: "512" }
 
     - name: Restart systemd-sysctl if sysctl changed
       systemd:
