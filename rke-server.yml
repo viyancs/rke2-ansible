@@ -1,34 +1,188 @@
 ---
-- name: Install RKE2 server on Ubuntu
-  hosts: rke2_master
-  become: true
+- name: Rancher RKE2 Setup
+  hosts: master
+  become: yes  # To escalate privileges (equivalent to sudo)
+
+  vars:
+    rancher_binary_url: "URL_TO_RKE2_BINARY"
+    rancher_images_url: "URL_TO_RKE2_IMAGES"
+    control_plane_dns: "CONTROL_PLANE_DNS"
+    rancher_token: "YOUR_RANCHER_TOKEN"
+    etcd_backup_bucket: "ETCD_BACKUP_BUCKET"
+    project: "YOUR_PROJECT"
+    environment: "YOUR_ENVIRONMENT"
+
   tasks:
-    - name: Add RKE2 repository GPG key
-      apt_key:
-        url: https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/xUbuntu_{{ ansible_distribution_release }}/Release.key
-        state: present
-
-    - name: Add RKE2 APT repository
-      apt_repository:
-        repo: deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_{{ ansible_distribution_release }}/
-        state: present
-        filename: rke2
-
-    - name: Update APT cache
+    - name: Update apt cache
       apt:
         update_cache: yes
+        cache_valid_time: 3600
 
-    - name: Install RKE2 server package
+    - name: Install required packages
       apt:
-        name: rke2-server
-        state: latest
+        name: ["curl", "sysctl", "gunzip", "tar", "systemd-sysv"]
+        state: present
 
-    - name: Start RKE2 service
-      service:
-        name: rke2-server
-        state: started
+    - name: Download Rancher files
+      get_url:
+        url: "{{ rancher_binary_url }}"
+        dest: /tmp/rke2.linux-amd64.tar.gz
 
-    - name: Enable RKE2 service on boot
-      service:
-        name: rke2-server
-        enabled: yes
+    - name: Create images directory
+      file:
+        path: /var/lib/rancher/rke2/agent/images
+        state: directory
+
+    - name: Decompress rancher images
+      command: gunzip /tmp/rke2-images.linux-amd64.tar.gz
+      args:
+        chdir: /var/lib/rancher/rke2/agent/images
+
+    - name: Move images archive
+      command: mv /var/lib/rancher/rke2/agent/images/rke2-images.linux-amd64.tar /var/lib/rancher/rke2/agent/images/
+      
+    - name: Install Rancher tarball
+      unarchive:
+        src: /tmp/rke2.linux-amd64.tar.gz
+        dest: /usr/local
+        remote_src: yes
+      become: yes
+
+    - name: Copy sysctl configuration
+      copy:
+        src: /usr/local/share/rke2/rke2-cis-sysctl.conf
+        dest: /etc/sysctl.d/60-rke2-cis.conf
+
+    - name: Set Kernel parameters
+      sysctl:
+        name: "{{ item }}"
+        value: "{{ item_value }}"
+      with_items:
+        - fs.inotify.max_user_watches=524288
+        - fs.inotify.max_user_instances=512
+
+    - name: Restart systemd-sysctl
+      systemd:
+        name: systemd-sysctl
+        state: restarted
+      listen: "sysctl changed"
+
+    - name: Create etcd user
+      user:
+        name: etcd
+        system: yes
+        shell: /sbin/nologin
+
+    - name: Create config directory
+      file:
+        path: /etc/rancher/rke2
+        state: directory
+
+    - name: Add KUBECONFIG and PATH to ~/.bashrc
+      lineinfile:
+        path: ~/.bashrc
+        line: |
+          export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+          export PATH=$PATH:/var/lib/rancher/rke2/bin
+
+    - name: Identify if we are the first server to launch
+      shell: "curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone"
+      register: availability_zone_result
+
+    - name: Determine Control-Plane Node Type
+      shell: |
+        if [[ "{{ availability_zone_result.stdout }}" == *"1a"* ]]; then
+            if timeout 1 bash -c "true <>/dev/tcp/{{ control_plane_dns }}/9345" 2>/dev/null; then
+                echo "Supervisor port is available, this is NOT the first node to come online"
+                echo "server: https://{{ control_plane_dns }}:9345" > /etc/rancher/rke2/config.yaml
+            else
+                echo "Supervisor port is NOT available, this is the first node to come online"
+                echo "NODE_TYPE=leader"
+            fi
+        else
+            echo "This is likely NOT the first control-plane node to come online due to not being in the first az"
+            echo "server: https://{{ control_plane_dns }}:9345" > /etc/rancher/rke2/config.yaml
+        fi
+      args:
+        executable: /bin/bash
+      register: control_plane_type_result
+
+    - name: Set Control-Plane Node Type Fact
+      set_fact:
+        node_type: "{{ control_plane_type_result.stdout_lines[0] }}"
+
+    - name: Get provider_id
+      shell: >
+        curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)/$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+      register: provider_id
+
+    - name: Get internal hostname
+      shell: >
+        curl -s http://169.254.169.254/latest/meta-data/local-hostname | awk -F '.' '{print $1}').$(curl -s http://169.254.169.254/latest/meta-data/placement/region).compute.internal
+      register: internal_hostname
+
+    - name: Set hostname
+      hostname:
+        name: "{{ internal_hostname.stdout }}"
+
+    - name: Configure server
+      lineinfile:
+        path: /etc/rancher/rke2/config.yaml
+        line: |
+          token: "{{ rancher_token }}"
+          kubelet-arg:
+            - "provider-id=aws:///{{ provider_id.stdout }}"
+          kube-apiserver-arg:
+            - "api-audiences=https://kubernetes.default.svc.cluster.local,rke2,sts.amazonaws.com"
+            - "service-account-issuer=https://kubernetes.default.svc.cluster.local"
+            - "service-account-issuer=https://{{ project }}-{{ environment }}-oidc.s3.{{ region }}.amazonaws.com"
+          node-taint:
+            - "CriticalAddonsOnly=true:NoExecute"
+          tls-san:
+            - "{{ control_plane_dns }}"
+          disable:
+            - "rke2-ingress-nginx"
+          etcd-s3: "true"
+          etcd-s3-bucket: "{{ etcd_backup_bucket }}"
+          etcd-s3-region: "{{ region }}"
+      vars:
+        rancher_token: "{{ rancher_token }}"
+        provider_id: "{{ provider_id.stdout }}"
+        project: "{{ project }}"
+        environment: "{{ environment }}"
+        control_plane_dns: "{{ control_plane_dns }}"
+        etcd_backup_bucket: "{{ etcd_backup_bucket }}"
+        region: "{{ region }}"
+      when: internal_hostname.changed
+
+    - name: Perform control-plane installation
+      block:
+        - name: Enable and start RKE2 service
+          systemd:
+            name: rke2-server
+            enabled: yes
+            state: started
+      when: NODE_TYPE == "leader"
+
+    - name: Wait for cluster readiness
+      block:
+        - name: Pause for a few seconds
+          pause:
+            seconds: 30
+          when: cluster_initialized.changed | default(false)
+        
+        - name: Perform control-plane installation
+          systemd:
+            name: rke2-server
+            enabled: yes
+            state: started
+      loop: "{{ range(1, 1000)|list }}"
+      delay: 10
+      register: cluster_initialized
+      until: "'443 open' in cluster_initialized.stdout"
+
+  handlers:
+    - name: Restart systemd-sysctl
+      systemd:
+        name: systemd-sysctl
+        state: restarted
