@@ -30,7 +30,6 @@
       shell: INSTALL_RKE2_TYPE="agent" sh /tmp/rke2-install.sh
       args:
         chdir: /tmp
-      when: not script_exists.stat.exists
 
     - name: Enable rke2-agent.service
       systemd:
