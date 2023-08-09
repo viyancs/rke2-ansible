@@ -1,6 +1,6 @@
 ---
 - name: Rancher RKE2 Setup
-  hosts: master
+  hosts: localhost
   become: yes  # To escalate privileges (equivalent to sudo)
 
   vars:
