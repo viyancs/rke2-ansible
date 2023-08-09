@@ -102,11 +102,8 @@
         state: restarted
       notify: "Restart systemd-sysctl"
 
-    - name: Ensure sysctl settings are applied
-      template:
-        src: sysctl.conf.j2
-        dest: /etc/sysctl.conf
-      notify: "Reload sysctl"
+    - name: Reload sysctl settings
+      command: sysctl --system
 
     - name: Create etcd user
       user:
