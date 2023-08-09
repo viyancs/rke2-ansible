@@ -221,11 +221,11 @@
   #     delay: 10
   #     when: cluster_initialized is not defined or cluster_initialized is failed
 
-  # handlers:
-  #   - name: Restart systemd-sysctl
-  #     systemd:
-  #       name: systemd-sysctl
-  #       state: restarted
+  handlers:
+    - name: Restart systemd-sysctl
+      systemd:
+        name: systemd-sysctl
+        state: restarted
 
-  #   - name: Reload sysctl
-  #     command: sysctl --system
+    - name: Reload sysctl
+      command: sysctl --system
